@@ -1,5 +1,6 @@
 const Report = require('../models/Report');
 const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
 // @desc    Crear reporte
 // @route   POST /api/reports
@@ -65,7 +66,7 @@ exports.getReports = async (req, res) => {
 
 // @desc    Obtener reporte por ID
 // @route   GET /api/reports/:id
-// @access  Public
+// @access  Public (pero verifica token opcionalmente)
 exports.getReportById = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id)
@@ -84,8 +85,27 @@ exports.getReportById = async (req, res) => {
       return res.status(404).json({ message: 'Reporte no encontrado' });
     }
 
+    // Verificar si hay un token y si el usuario es admin
+    let isAdmin = false;
+    if (req.user) {
+      isAdmin = req.user.role === 'admin';
+    } else {
+      // Intentar verificar token de forma opcional
+      const token = req.header('Authorization')?.replace('Bearer ', '');
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await User.findById(decoded.id).select('-password');
+          if (user && user.role === 'admin') {
+            isAdmin = true;
+          }
+        } catch (error) {
+          // Token inválido, continuar sin autenticación
+        }
+      }
+    }
+
     // Solo admins pueden ver reportes no aprobados
-    const isAdmin = req.user && req.user.role === 'admin';
     if (!report.approved && !isAdmin) {
       return res.status(403).json({ message: 'Este reporte está pendiente de aprobación' });
     }
