@@ -14,23 +14,45 @@ app.use(cors({
     'http://localhost:3001',
     'https://calisinhuecosfront.vercel.app'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Manejar preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Conexión a MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/cali-sin-huecos', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('✅ Conectado a MongoDB');
-})
-.catch((error) => {
-  console.error('❌ Error conectando a MongoDB:', error);
-  process.exit(1);
-});
+const connectDB = async () => {
+  try {
+    const mongoURI = process.env.MONGODB_URI;
+    
+    if (!mongoURI) {
+      console.error('❌ MONGODB_URI no está configurada');
+      if (process.env.NODE_ENV === 'production') {
+        console.error('⚠️ No se puede conectar a MongoDB en producción sin MONGODB_URI');
+        return;
+      }
+    }
+    
+    await mongoose.connect(mongoURI || 'mongodb://localhost:27017/cali-sin-huecos', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('✅ Conectado a MongoDB');
+  } catch (error) {
+    console.error('❌ Error conectando a MongoDB:', error.message);
+    // En producción, no hacer exit para que Vercel pueda manejar el error
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
+  }
+};
+
+connectDB();
 
 // Rutas
 app.use('/api/auth', require('./routes/auth'));
@@ -45,10 +67,17 @@ app.get('/api/health', (req, res) => {
 
 // Manejo de errores
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
+  console.error('Error:', err.stack);
+  
+  // Asegurar headers CORS incluso en errores
+  res.header('Access-Control-Allow-Origin', req.headers.origin || 'https://calisinhuecosfront.vercel.app');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  res.status(err.status || 500).json({ 
     message: 'Error interno del servidor', 
-    error: process.env.NODE_ENV === 'development' ? err.message : {} 
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined 
   });
 });
 
