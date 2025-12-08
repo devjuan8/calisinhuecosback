@@ -1,5 +1,6 @@
 const Report = require('../models/Report');
 const User = require('../models/User');
+const Donation = require('../models/Donation');
 const jwt = require('jsonwebtoken');
 
 // @desc    Crear reporte
@@ -288,7 +289,7 @@ exports.approveReport = async (req, res) => {
   }
 };
 
-// @desc    Rechazar reporte
+// @desc    Rechazar reporte (elimina de la BD)
 // @route   PUT /api/reports/:id/reject
 // @access  Private (Admin only)
 exports.rejectReport = async (req, res) => {
@@ -301,15 +302,26 @@ exports.rejectReport = async (req, res) => {
     }
 
     if (report.approved) {
-      return res.status(400).json({ message: 'El reporte ya está aprobado' });
+      return res.status(400).json({ message: 'No se puede rechazar un reporte ya aprobado' });
     }
 
-    report.approved = false;
-    report.rejectionReason = rejectionReason || 'Reporte rechazado por el administrador';
+    // Eliminar todas las donaciones asociadas al reporte
+    await Donation.deleteMany({ report: report._id });
 
-    await report.save();
+    // Decrementar contador de reportes del usuario que lo creó
+    if (report.reportedBy) {
+      await User.findByIdAndUpdate(report.reportedBy, {
+        $inc: { reportsCount: -1 },
+      });
+    }
 
-    res.json({ message: 'Reporte rechazado', report });
+    // Eliminar el reporte de la base de datos
+    await Report.findByIdAndDelete(req.params.id);
+
+    res.json({ 
+      message: 'Reporte rechazado y eliminado exitosamente',
+      rejectionReason: rejectionReason || 'Reporte rechazado por el administrador'
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
