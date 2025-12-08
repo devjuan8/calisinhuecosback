@@ -8,6 +8,30 @@ const jwt = require('jsonwebtoken');
 // @access  Private
 exports.createReport = async (req, res) => {
   try {
+    // Validar datos básicos
+    if (!req.body.title || !req.body.description || !req.body.location) {
+      return res.status(400).json({ message: 'Faltan campos requeridos' });
+    }
+
+    // Validar coordenadas
+    if (!req.body.location.coordinates || 
+        typeof req.body.location.coordinates.lat !== 'number' ||
+        typeof req.body.location.coordinates.lng !== 'number') {
+      return res.status(400).json({ message: 'Coordenadas inválidas' });
+    }
+
+    // Validar tamaño de imágenes (máximo 2MB por imagen en base64)
+    if (req.body.images && Array.isArray(req.body.images)) {
+      for (let i = 0; i < req.body.images.length; i++) {
+        const imgSize = (req.body.images[i].length * 3) / 4; // Tamaño aproximado en bytes
+        if (imgSize > 2 * 1024 * 1024) {
+          return res.status(400).json({ 
+            message: `La imagen ${i + 1} es muy grande. Máximo 2MB por imagen después de compresión.` 
+          });
+        }
+      }
+    }
+
     const report = await Report.create({
       ...req.body,
       reportedBy: req.user.id,
@@ -22,7 +46,17 @@ exports.createReport = async (req, res) => {
 
     res.status(201).json(report);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error creando reporte:', error);
+    
+    // Manejar errores específicos de MongoDB
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Error al crear el reporte. Por favor intenta de nuevo.' 
+    });
   }
 };
 

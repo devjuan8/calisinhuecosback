@@ -22,8 +22,9 @@ app.use(cors({
 // Manejar preflight requests
 app.options('*', cors());
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Aumentar límite de tamaño para manejar imágenes en base64
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Conexión a MongoDB
 const connectDB = async () => {
